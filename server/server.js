@@ -15,12 +15,7 @@ const app = express();
 require("./config/passport");
 
 const cloudinary = require("cloudinary").v2;
-cloudinary.config({
-	cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-	api_key: process.env.CLOUDINARY_API_KEY,
-	api_secret: process.env.CLOUDINARY_API_SECRET,
-	secure: true,
-});
+
 
 // Middleware
 // app.use(cors());
@@ -42,109 +37,9 @@ const razorpay = new Razorpay({
 	key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-const generateOrderId = () => {
-	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	let orderId = "";
-	for (let i = 0; i < 6; i++) {
-		orderId += letters.charAt(Math.floor(Math.random() * letters.length));
-	}
-	for (let i = 0; i < 4; i++) {
-		orderId += Math.floor(Math.random() * 10);
-	}
-	return orderId;
-};
 
-exports.checkout = async (req, res) => {
-	try {
-		const { shippingAddress, paymentMethod } = req.body;
-		const user = await User.findById(req.user.id).populate("cart.goodie");
 
-		if (user.cart.length === 0) {
-			return res.status(400).json({ message: "Cart is empty" });
-		}
 
-		let totalPrice = 0;
-		let totalCoinPrice = 0;
-		const items = user.cart.map((item) => {
-			totalPrice += item.goodie.price * item.quantity;
-			totalCoinPrice += item.goodie.coinPrice * item.quantity;
-			return {
-				goodie: item.goodie._id,
-				quantity: item.quantity,
-				price: item.goodie.price,
-				coinPrice: item.goodie.coinPrice,
-			};
-		});
-
-		if (paymentMethod === "coin" && user.coins < totalCoinPrice) {
-			return res.status(400).json({ message: "Insufficient coins" });
-		}
-
-		const orderId = generateOrderId();
-		const order = new Order({
-			user: req.user.id,
-			items,
-			totalPrice,
-			totalCoinPrice,
-			shippingAddress,
-			paymentMethod,
-			orderId,
-		});
-
-		if (paymentMethod === "money") {
-			const options = {
-				amount: totalPrice * 100, // Razorpay expects amount in paise
-				currency: "INR",
-				receipt: orderId,
-			};
-			const razorpayOrder = await razorpay.orders.create(options);
-			order.razorpayOrderId = razorpayOrder.id;
-			await order.save();
-
-			return res.status(200).json({
-				message: "Order created, proceed to payment",
-				razorpayOrder,
-				orderId,
-			});
-		} else {
-			user.coins -= totalCoinPrice;
-			user.cart = [];
-			user.orders.push(order._id);
-			await user.save();
-			await order.save();
-			return res.status(200).json({
-				message:
-					"Order placed successfully! Our team will contact you shortly.",
-				orderId,
-			});
-		}
-	} catch (error) {
-		res.status(500).json({ message: "Server error", error });
-	}
-};
-
-exports.getUserOrders = async (req, res) => {
-	try {
-		const orders = await Order.find({ user: req.user.id }).populate(
-			"items.goodie"
-		);
-		res.status(200).json(orders);
-	} catch (error) {
-		res.status(500).json({ message: "Server error", error });
-	}
-};
-
-exports.getOrderById = async (req, res) => {
-	try {
-		const order = await Order.findById(req.params.id).populate("items.goodie");
-		if (!order || order.user.toString() !== req.user.id) {
-			return res.status(404).json({ message: "Order not found" });
-		}
-		res.status(200).json(order);
-	} catch (error) {
-		res.status(500).json({ message: "Server error", error });
-	}
-};
 
 // Routes
 const subscribeRoutes = require("./routes/subscribe");
@@ -182,86 +77,7 @@ const orderRoutes = require("./routes/orders");
 const Article = require("./models/Article");
 const Course = require("./models/Course");
 
-app.get("/sitemap.xml", async (req, res) => {
-	try {
-		const articles = await Article.find().select("_id createdAt");
-		const courses = await Course.find().select("_id createdAt");
-		const baseUrl = "https://kalawatiputra.com";
-		const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${baseUrl}</loc>
-    <lastmod>${new Date().toISOString().split("T")[0]}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/blogs-articles</loc>
-    <lastmod>${new Date().toISOString().split("T")[0]}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/courses</loc>
-    <lastmod>${new Date().toISOString().split("T")[0]}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/services</loc>
-    <lastmod>${new Date().toISOString().split("T")[0]}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>${baseUrl}/admissionhelp</loc>
-    <lastmod>${new Date().toISOString().split("T")[0]}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  ${articles
-		.map(
-			(article) => `
-  <url>
-    <loc>${baseUrl}/article/${article._id}</loc>
-    <lastmod>${
-			new Date(article.createdAt).toISOString().split("T")[0]
-		}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>`
-		)
-		.join("")}
-  ${courses
-		.map(
-			(course) => `
-  <url>
-    <loc>${baseUrl}/courses/${course._id}</loc>
-    <lastmod>${new Date(course.createdAt).toISOString().split("T")[0]}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>`
-		)
-		.join("")}
-</urlset>`;
-		res.header("Content-Type", "application/xml");
-		res.send(xml);
-	} catch (err) {
-		console.error(err);
-		res.status(500).send("Error generating sitemap");
-	}
-});
 
-// Robots.txt
-app.get("/robots.txt", (req, res) => {
-	const robots = `
-User-agent: *
-Allow: /
-Sitemap: https://kalawatiputra.com/sitemap.xml
-`;
-	res.header("Content-Type", "text/plain");
-	res.send(robots);
-});
 
 // Use routes
 app.use("/api/subscribe", subscribeRoutes);
@@ -331,9 +147,7 @@ if (process.env.NODE_ENV === "production") {
 // MongoDB connection
 const connectDB = async () => {
 	try {
-		const dbOptions = {
-			dbName: "kalawatiputratutor",
-		};
+		
 		await mongoose.connect(process.env.MONGO_URI, dbOptions);
 		console.log("MongoDB connected");
 	} catch (err) {
