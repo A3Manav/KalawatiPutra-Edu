@@ -65,17 +65,7 @@ function App() {
 			<Router>
 				<div className="min-h-screen bg-gray-100 font-outfit">
 					{/* Load DMSans from Google Fonts */}
-					<Helmet>
-						<link
-							href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap"
-							rel="stylesheet"
-						/>
-						<style>
-							{`
-      body {
-        font-family: 'Outfit', sans-serif;
-      }
-    `}
+	
 						</style>
 					</Helmet>
 					<Navbar />
