@@ -41,7 +41,7 @@
 ---
 
 ## 🏗️ Folder Structure
-
+```bash
 kalawatiputra-edu/
 ├── client/ # React frontend
 │ ├── src/
@@ -60,4 +60,6 @@ kalawatiputra-edu/
 ├── .env
 ├── README.md
 └── package.json
+```
+
 
